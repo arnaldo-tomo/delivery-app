@@ -1,29 +1,32 @@
 {
   "expo": {
-    "name": "delivery-app",
+    "name": "Delivery App",
     "slug": "delivery-app",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "platforms": ["ios", "android"],
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "image": "./assets/splash.png"
     },
     "ios": {
-      "supportsTablet": true
+      "config": {
+        "googleMapsApiKey": "AIzaSyAtu-ig_-9TgJwxRqhTMrnDLF1HgeTxm1c"
+      }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "edgeToEdgeEnabled": true
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAtu-ig_-9TgJwxRqhTMrnDLF1HgeTxm1c"
+        }
+      }
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    }
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Este app precisa de acesso à localização para navegação."
+        }
+      ]
+    ]
   }
 }
