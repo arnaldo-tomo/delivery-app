@@ -1,7 +1,7 @@
 // src/services/ApiService.js - Versão Corrigida
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.100.6:2021/api/v1'; // Sua URL real
+const API_BASE_URL = 'http://192.168.58.104:8000/api/v1'; // Sua URL real
 
 class ApiService {
   constructor() {

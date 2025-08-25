@@ -1,5 +1,5 @@
 // src/config/api.js
-const API_BASE_URL = 'http://192.168.100.6:2021/api/v1'; // Substitua pela sua URL real
+const API_BASE_URL = 'http://192.168.58.104:8000/api/v1'; // Substitua pela sua URL real
 
 export const api = {
   // Auth endpoints
