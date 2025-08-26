@@ -1,4 +1,4 @@
-// src/context/AuthContext.js - Versão corrigida com debug
+// src/context/AuthContext.js - Versão Simplificada e Robusta
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import ApiService from '../services/ApiService';
 
@@ -18,95 +18,104 @@ export const AuthProvider = ({ children }) => {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    console.log('🚀 AuthProvider inicializando...');
     initializeAuth();
   }, []);
 
   const initializeAuth = async () => {
     try {
       setLoading(true);
-      console.log('🔍 Verificando autenticação existente...');
+      console.log('🔄 Inicializando autenticação...');
       
-      // Verificar se existe token salvo
       const token = await ApiService.getToken();
       
       if (token) {
-        console.log('🔑 Token encontrado, validando com servidor...');
+        console.log('✅ Token encontrado, validando...');
         
         try {
-          // Tentar validar o token com a API
           const response = await ApiService.getProfile();
           
-          if (response.status === 'success') {
-            console.log('✅ Token válido, usuário logado:', response.data);
+          if (response.status === 'success' && response.data) {
+            console.log('✅ Login automático bem-sucedido');
             setUser(response.data);
           } else {
             console.log('❌ Token inválido, removendo...');
             await ApiService.removeToken();
-            setUser(null);
           }
         } catch (error) {
           console.log('❌ Erro ao validar token:', error.message);
-          
-          // Se erro 401, token expirado
-          if (error.message.includes('expirou') || error.message.includes('Unauthenticated')) {
-            console.log('⏰ Token expirado, fazendo logout...');
-            await ApiService.removeToken();
-            setUser(null);
-          } else {
-            console.log('🌐 Erro de rede, mantendo token para tentar depois');
-            // Em caso de erro de rede, não remover o token
-          }
+          await ApiService.removeToken();
         }
       } else {
-        console.log('ℹ️ Nenhum token encontrado - usuário não logado');
-        setUser(null);
+        console.log('ℹ️ Nenhum token encontrado');
       }
     } catch (error) {
-      console.error('❌ Erro crítico na inicialização:', error);
-      // Em caso de erro crítico, limpar tudo
+      console.error('❌ Erro na inicialização:', error);
       await ApiService.removeToken();
-      setUser(null);
     } finally {
       setLoading(false);
       setIsInitialized(true);
-      console.log('✅ Inicialização da autenticação concluída');
+      console.log('✅ Autenticação inicializada');
     }
   };
 
   const login = async (email, password, rememberMe = true) => {
     try {
       setLoading(true);
-      console.log('🔐 Tentando fazer login para:', email);
+      console.log('🔐 Fazendo login...');
       
       const response = await ApiService.login(email, password);
       
-      if (response.status === 'success') {
-        console.log('✅ Login bem-sucedido');
+      if (response.status === 'success' && response.data?.user) {
+        console.log('✅ Login realizado com sucesso');
+        setUser(response.data.user);
         
-        // Extrair dados do usuário da resposta
-        let userData = null;
-        
-        if (response.data) {
-          userData = response.data.user || response.data;
+        if (!rememberMe) {
+          console.log('⚠️ Modo temporário ativado');
+          // TODO: Implementar lógica para não persistir o token
         }
         
-        if (userData) {
-          setUser(userData);
-          console.log('👤 Usuário definido:', userData.name, '- Papel:', userData.role);
-          
-          return { success: true, data: userData };
-        } else {
-          console.error('❌ Dados do usuário não encontrados na resposta');
-          return { success: false, error: 'Dados do usuário não recebidos' };
-        }
+        return { success: true, user: response.data.user };
       } else {
-        console.log('❌ Login falhou:', response.message);
-        return { success: false, error: response.message || 'Erro no login' };
+        console.error('❌ Login falhou');
+        return { 
+          success: false, 
+          error: response.message || 'Erro no login' 
+        };
       }
     } catch (error) {
-      console.error('❌ Erro no login:', error);
-      return { success: false, error: error.message || 'Erro de conexão' };
+      console.error('❌ Erro no login:', error.message);
+      return { 
+        success: false, 
+        error: error.message || 'Erro de conexão' 
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const register = async (userData) => {
+    try {
+      setLoading(true);
+      console.log('📝 Registrando usuário...');
+      
+      const response = await ApiService.register(userData);
+      
+      if (response.status === 'success' && response.data?.user) {
+        console.log('✅ Registro realizado com sucesso');
+        setUser(response.data.user);
+        return { success: true, user: response.data.user };
+      } else {
+        return { 
+          success: false, 
+          error: response.message || 'Erro no registro' 
+        };
+      }
+    } catch (error) {
+      console.error('❌ Erro no registro:', error);
+      return { 
+        success: false, 
+        error: error.message || 'Erro de conexão' 
+      };
     } finally {
       setLoading(false);
     }
@@ -114,120 +123,80 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      setLoading(true);
-      console.log('🚪 Iniciando logout...');
-      
-      // Fazer logout na API
-      try {
-        await ApiService.logout();
-        console.log('✅ Logout no servidor concluído');
-      } catch (error) {
-        console.log('⚠️ Erro no logout do servidor:', error.message);
-        // Continuar com logout local mesmo se servidor falhar
-      }
-      
-      // Limpar estado local
+      console.log('🚪 Fazendo logout...');
+      await ApiService.logout();
       setUser(null);
-      console.log('✅ Logout local concluído');
-      
+      console.log('✅ Logout realizado');
       return { success: true };
     } catch (error) {
       console.error('❌ Erro no logout:', error);
-      
-      // Forçar logout local em caso de erro
-      try {
-        await ApiService.removeToken();
-        setUser(null);
-        console.log('✅ Logout forçado realizado');
-        return { success: true };
-      } catch (forceError) {
-        console.error('❌ Falha no logout forçado:', forceError);
-        return { success: false, error: 'Erro ao fazer logout' };
-      }
-    } finally {
-      setLoading(false);
+      // Mesmo com erro, limpar estado local
+      setUser(null);
+      return { success: false, error: error.message };
     }
   };
 
-  const refreshProfile = async () => {
+  const updateUser = (updatedData) => {
+    console.log('🔄 Atualizando dados do usuário');
+    setUser(prev => ({ ...prev, ...updatedData }));
+  };
+
+  const refreshUser = async () => {
     try {
-      console.log('🔄 Atualizando perfil do usuário...');
+      console.log('🔄 Atualizando perfil...');
       const response = await ApiService.getProfile();
       
-      if (response.status === 'success') {
+      if (response.status === 'success' && response.data) {
         setUser(response.data);
-        console.log('✅ Perfil atualizado:', response.data.name);
-        return { success: true, data: response.data };
+        return { success: true, user: response.data };
       } else {
-        console.log('❌ Erro ao atualizar perfil:', response.message);
         return { success: false, error: response.message };
       }
     } catch (error) {
       console.error('❌ Erro ao atualizar perfil:', error);
       
-      // Se erro 401, fazer logout automático
-      if (error.message.includes('expirou') || error.message.includes('Unauthenticated')) {
-        console.log('⏰ Sessão expirou durante atualização do perfil');
-        await logout();
+      if (error.message.includes('Sessão expirada')) {
+        setUser(null);
       }
       
       return { success: false, error: error.message };
     }
   };
 
-  // =============== FUNÇÕES DE DEBUG ===============
-  
-  const debugAuth = async () => {
-    console.log('🔍 === DEBUG AUTH ===');
-    console.log('Estado atual:');
-    console.log('  user:', user?.name || 'null');
-    console.log('  role:', user?.role || 'null');
-    console.log('  loading:', loading);
-    console.log('  isInitialized:', isInitialized);
-    console.log('  isAuthenticated:', !!user);
-    
-    await ApiService.debugAuth();
-    console.log('🔍 === FIM DEBUG ===');
+  // 🔍 DEBUG: Método para verificar estado atual
+  const getDebugInfo = () => {
+    return {
+      user: user ? { id: user.id, name: user.name, email: user.email } : null,
+      loading,
+      isInitialized,
+      isAuthenticated: !!user,
+      timestamp: new Date().toISOString()
+    };
   };
-
-  const forceLogout = async () => {
-    console.log('🔧 === LOGOUT FORÇADO ===');
-    await ApiService.clearAllData();
-    setUser(null);
-    setLoading(false);
-    console.log('✅ Logout forçado concluído');
-  };
-
-  // Verificar se é entregador
-  const isDeliveryPerson = user?.role === 'delivery_person';
-  const isAuthenticated = !!user;
-
-  // Log de mudanças no estado do usuário
-  useEffect(() => {
-    if (user) {
-      console.log('👤 Usuário autenticado:', user.name, '(', user.role, ')');
-    } else if (isInitialized) {
-      console.log('👤 Usuário não autenticado');
-    }
-  }, [user, isInitialized]);
 
   const value = {
-    // Estados
+    // Estado
     user,
     loading,
     isInitialized,
-    isAuthenticated,
-    isDeliveryPerson,
+    isAuthenticated: !!user,
     
-    // Funções
+    // Métodos principais
     login,
+    register,
     logout,
-    refreshProfile,
+    updateUser,
+    refreshUser,
     
-    // Debug (remover em produção)
-    debugAuth,
-    forceLogout,
+    // Utilitários
+    getDebugInfo,
+    initializeAuth,
   };
+
+  // 🔍 DEBUG: Log do estado sempre que mudar
+  useEffect(() => {
+    console.log('🔍 AuthContext State:', getDebugInfo());
+  }, [user, loading, isInitialized]);
 
   return (
     <AuthContext.Provider value={value}>

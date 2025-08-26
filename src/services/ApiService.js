@@ -112,21 +112,21 @@ this.baseURL = 'http://192.168.58.104:8000/api/v1'; // Substitua pela sua URL
         // Extrair token da resposta
         let token = null;
         let userData = null;
-
+console.log('🔍 Analisando resposta do login...',response.data);
         // Tentar diferentes estruturas de resposta
         if (response.data) {
-          if (response.data.access_token) {
-            // Estrutura: { status, data: { access_token, user } }
-            token = response.data.access_token;
+          if (response.data.token) {
+            // Estrutura: { status, data: { token, user } }
+            token = response.data.token;
             userData = response.data.user || response.data;
           } else if (response.token) {
             // Estrutura: { status, token, user }
             token = response.token;
             userData = response.user || response.data;
           }
-        } else if (response.access_token) {
-          // Estrutura direta: { status, access_token, user }
-          token = response.access_token;
+        } else if (response.token) {
+          // Estrutura direta: { status, token, user }
+          token = response.token;
           userData = response.user;
         }
 
@@ -138,7 +138,7 @@ this.baseURL = 'http://192.168.58.104:8000/api/v1'; // Substitua pela sua URL
             status: 'success',
             data: {
               user: userData,
-              access_token: token
+              token: token
             }
           };
         } else {

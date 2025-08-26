@@ -23,8 +23,8 @@ export const DeliveryProvider = ({ children }) => {
     try {  
       const response = await ApiService.getAvailableOrders();
       if (response.status === 'success') {
-        // console.log('Pedidos disponíveis ca÷rrregados:', response.data.data?.length || 0);
-        // console.log('Pedidos disponíveis: nrh', response.data.data);
+        console.log('Pedidos disponíveis ca÷rrregados:', response.data.data?.length || 0);
+        console.log('Pedidos disponíveis: nrh', response.data.data);
         setAvailableOrders(response.data.data || []);
       }
     } catch (error) {
