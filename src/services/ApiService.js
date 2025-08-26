@@ -1,127 +1,69 @@
-// src/services/ApiService.js
+// src/services/ApiService.js - Versão atualizada com endpoints de proximidade
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_BASE_URL = 'http://192.168.58.104:8000/api/v1';
-
-export const calculateDistance = (point1, point2) => {
-  const R = 6371;
-  const dLat = deg2rad(point2.latitude - point1.latitude);
-  const dLon = deg2rad(point2.longitude - point1.longitude);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(point1.latitude)) * Math.cos(deg2rad(point2.latitude)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
-
-const deg2rad = (deg) => deg * (Math.PI / 180);
-
-export const formatDistance = (km) => {
-  if (km < 1) {
-    return `${Math.round(km * 1000)}m`;
-  }
-  return `${km.toFixed(1)}km`;
-};
-
-export const estimateDeliveryTime = (distanceKm, includePickup = true) => {
-  const pickupTime = includePickup ? 5 : 0;
-  const travelTime = distanceKm * 2;
-  const deliveryTime = 3;
-  return Math.round(pickupTime + travelTime + deliveryTime);
-};
 
 class ApiService {
   constructor() {
-    this.baseURL = API_BASE_URL;
+    this.baseURL = 'http://192.168.100.3:8000/api/v1'; // Substitua pela sua URL
     this.token = null;
   }
 
   async getToken() {
     if (!this.token) {
-      try {
-        this.token = await AsyncStorage.getItem('auth_token');
-      } catch (error) {
-        console.error('Erro ao obter token:', error);
-        this.token = null;
-      }
+      this.token = await AsyncStorage.getItem('auth_token');
     }
     return this.token;
   }
 
   async setToken(token) {
-    try {
-      this.token = token;
+    this.token = token;
+    if (token) {
       await AsyncStorage.setItem('auth_token', token);
-      console.log('Token salvo com sucesso');
-    } catch (error) {
-      console.error('Erro ao salvar token:', error);
-      throw error;
-    }
-  }
-
-  async removeToken() {
-    try {
-      this.token = null;
+    } else {
       await AsyncStorage.removeItem('auth_token');
-      console.log('Token removido com sucesso');
-    } catch (error) {
-      console.error('Erro ao remover token:', error);
     }
   }
 
   async makeRequest(endpoint, options = {}) {
     const token = await this.getToken();
-    
+    const url = `${this.baseURL}${endpoint}`;
+
     const config = {
-      method: options.method || 'GET',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         ...(token && { 'Authorization': `Bearer ${token}` }),
-        ...options.headers,
       },
       ...options,
     };
 
-    if (options.params) {
-      const queryString = new URLSearchParams(options.params).toString();
-      endpoint = `${endpoint}${queryString ? `?${queryString}` : ''}`;
-    }
-
     try {
-      console.log(`API Request: ${config.method} ${this.baseURL}${endpoint}`);
-      const response = await fetch(`${this.baseURL}${endpoint}`, {
-        ...config,
-        body: config.body ? JSON.stringify(config.body) : undefined,
-      });
+      console.log(`📡 API Request: ${options.method || 'GET'} ${endpoint}`);
+      
+      const response = await fetch(url, config);
       const data = await response.json();
 
-      console.log(`API Response (${response.status}):`, data);
-
       if (!response.ok) {
-        if (response.status === 401) {
-          console.log('Token expirado, removendo...');
-          await this.removeToken();
-        }
-        throw new Error(data.message || `Erro ${response.status}`);
+        console.error(`❌ API Error ${response.status}:`, data);
+        throw new Error(data.message || 'Erro na requisição');
       }
 
+      console.log(`✅ API Response: ${endpoint}`, data.status);
       return data;
     } catch (error) {
-      console.error('API Error:', error);
+      console.error(`❌ Network Error: ${endpoint}`, error.message);
       throw error;
     }
   }
 
+  // =============== AUTH METHODS ===============
   async login(email, password) {
     const response = await this.makeRequest('/auth/login', {
       method: 'POST',
-      body: { email, password },
+      body: JSON.stringify({ email, password }),
     });
 
-    if (response.status === 'success' && response.data.access_token) {
-      await this.setToken(response.data.access_token);
+    if (response.token) {
+      await this.setToken(response.token);
     }
 
     return response;
@@ -130,8 +72,10 @@ class ApiService {
   async logout() {
     try {
       await this.makeRequest('/auth/logout', { method: 'POST' });
+    } catch (error) {
+      console.log('Erro no logout (continuando mesmo assim):', error);
     } finally {
-      await this.removeToken();
+      await this.setToken(null);
     }
   }
 
@@ -139,63 +83,262 @@ class ApiService {
     return await this.makeRequest('/auth/me');
   }
 
-  async updateProfile(data) {
-    return await this.makeRequest('/auth/profile', {
-      method: 'PATCH',
-      body: data,
-    });
-  }
+  // =============== DELIVERY METHODS - ATUALIZADOS COM PROXIMIDADE ===============
 
-  async getAvailableDeliveryOrders(page = 1, latitude, longitude, perPage = 10) {
-    if (!latitude || !longitude) {
-      throw new Error('Localização obrigatória');
+  /**
+   * Buscar pedidos disponíveis com filtros de proximidade
+   */
+  async getAvailableOrders(page = 1, filters = {}) {
+    let endpoint = `/delivery/available-orders?page=${page}`;
+    
+    // Adicionar parâmetros de filtro
+    const params = new URLSearchParams();
+    
+    if (filters.radius) {
+      params.append('radius', filters.radius);
     }
-    return await this.makeRequest('/delivery/available-orders', {
-      method: 'GET',
-      params: { page, per_page: perPage, latitude, longitude },
-    });
+    
+    if (filters.max_orders) {
+      params.append('max_orders', filters.max_orders);
+    }
+
+    if (params.toString()) {
+      endpoint += `&${params.toString()}`;
+    }
+
+    return await this.makeRequest(endpoint);
   }
 
-  async acceptDeliveryOrder(orderId) {
-    return await this.makeRequest(`/delivery/orders/${orderId}/accept`, {
-      method: 'POST',
-    });
-  }
-
-  async getMyDeliveries(page = 1) {
-    return await this.makeRequest('/delivery/my-deliveries', {
-      method: 'GET',
-      params: { page },
-    });
-  }
-
-  async updateDeliveryStatus(orderId, status, location = null) {
-    const body = { status };
+  /**
+   * Aceitar pedido com localização
+   */
+  async acceptOrder(orderId, location = null) {
+    const body = {};
+    
     if (location) {
       body.latitude = location.latitude;
       body.longitude = location.longitude;
     }
+
+    return await this.makeRequest(`/delivery/orders/${orderId}/accept`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /**
+   * Buscar minhas entregas
+   */
+  async getMyDeliveries(page = 1) {
+    return await this.makeRequest(`/delivery/my-deliveries?page=${page}`);
+  }
+
+  /**
+   * Atualizar status da entrega com localização
+   */
+  async updateDeliveryStatus(orderId, status, location = null) {
+    const body = { status };
+    
+    if (location) {
+      body.latitude = location.latitude;
+      body.longitude = location.longitude;
+    }
+
     return await this.makeRequest(`/delivery/orders/${orderId}/status`, {
       method: 'PATCH',
-      body,
+      body: JSON.stringify(body),
     });
   }
 
-  async updateDeliveryLocation(location) {
-    return await this.makeRequest('/delivery/location', {
+  /**
+   * NOVO: Atualizar localização do entregador
+   */
+  async updateDeliveryLocation(latitude, longitude) {
+    return await this.makeRequest('/delivery/update-location', {
       method: 'POST',
-      body: {
-        latitude: location.latitude,
-        longitude: location.longitude,
-      },
+      body: JSON.stringify({ latitude, longitude }),
     });
   }
 
-  async getDeliveryStats(period = 'today') {
-    return await this.makeRequest('/delivery/stats', {
-      method: 'GET',
-      params: { period },
+  /**
+   * NOVO: Buscar estatísticas do entregador
+   */
+  async getDeliveryStats() {
+    return await this.makeRequest('/delivery/stats');
+  }
+
+  /**
+   * NOVO: Obter configurações do entregador
+   */
+  async getDeliverySettings() {
+    return await this.makeRequest('/delivery/settings');
+  }
+
+  /**
+   * NOVO: Atualizar configurações do entregador
+   */
+  async updateDeliverySettings(settings) {
+    return await this.makeRequest('/delivery/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(settings),
     });
+  }
+
+  /**
+   * NOVO: Buscar pedidos próximos em tempo real
+   */
+  async getNearbyOrdersRealtime(location) {
+    return await this.makeRequest('/delivery/nearby-orders-realtime', {
+      method: 'POST',
+      body: JSON.stringify(location),
+    });
+  }
+
+  // =============== CUSTOMER ORDER METHODS ===============
+  async getOrders(page = 1) {
+    return await this.makeRequest(`/orders?page=${page}`);
+  }
+
+  async createOrder(orderData) {
+    return await this.makeRequest('/orders', {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  async getOrder(orderId) {
+    return await this.makeRequest(`/orders/${orderId}`);
+  }
+
+  async trackOrder(orderId) {
+    return await this.makeRequest(`/orders/${orderId}/track`);
+  }
+
+  async cancelOrder(orderId) {
+    return await this.makeRequest(`/orders/${orderId}/cancel`, {
+      method: 'PATCH',
+    });
+  }
+
+  // =============== PAYMENT METHODS ===============
+  async initiateMpesaPayment(orderId, phoneNumber) {
+    return await this.makeRequest(`/orders/${orderId}/payment/mpesa`, {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber }),
+    });
+  }
+
+  async initiateEmolaPayment(orderId, phoneNumber) {
+    return await this.makeRequest(`/orders/${orderId}/payment/emola`, {
+      method: 'POST',
+      body: JSON.stringify({ phone_number: phoneNumber }),
+    });
+  }
+
+  async confirmCashPayment(orderId) {
+    return await this.makeRequest(`/orders/${orderId}/payment/cash`, {
+      method: 'POST',
+    });
+  }
+
+  async checkPaymentStatus(orderId) {
+    return await this.makeRequest(`/orders/${orderId}/payment/status`);
+  }
+
+  async getPaymentMethods() {
+    return await this.makeRequest('/payment/methods');
+  }
+
+  // =============== RESTAURANT METHODS ===============
+  async getRestaurants(filters = {}) {
+    let endpoint = '/restaurants';
+    const params = new URLSearchParams();
+    
+    if (filters.category) params.append('category', filters.category);
+    if (filters.search) params.append('search', filters.search);
+    if (filters.latitude && filters.longitude) {
+      params.append('latitude', filters.latitude);
+      params.append('longitude', filters.longitude);
+    }
+    
+    if (params.toString()) {
+      endpoint += `?${params.toString()}`;
+    }
+    
+    return await this.makeRequest(endpoint);
+  }
+
+  async getRestaurant(restaurantId) {
+    return await this.makeRequest(`/restaurants/${restaurantId}`);
+  }
+
+  async getRestaurantMenu(restaurantId) {
+    return await this.makeRequest(`/restaurants/${restaurantId}/menu`);
+  }
+
+  // =============== USER METHODS ===============
+  async updateProfile(profileData) {
+    return await this.makeRequest('/auth/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(profileData),
+    });
+  }
+
+  async savePushToken(token, platform) {
+    return await this.makeRequest('/user/save-push-token', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        push_token: token,
+        device_platform: platform 
+      }),
+    });
+  }
+
+  // =============== UTILITY METHODS ===============
+
+  /**
+   * Upload de imagem (para avatar, etc.)
+   */
+  async uploadImage(imageUri, type = 'avatar') {
+    const token = await this.getToken();
+    
+    const formData = new FormData();
+    formData.append('image', {
+      uri: imageUri,
+      type: 'image/jpeg',
+      name: `${type}_${Date.now()}.jpg`,
+    });
+    formData.append('type', type);
+
+    const response = await fetch(`${this.baseURL}/upload/image`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    return await response.json();
+  }
+
+  /**
+   * Verificar conectividade com a API
+   */
+  async checkConnectivity() {
+    try {
+      const response = await fetch(`${this.baseURL}/health`);
+      return response.ok;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Obter configurações da aplicação
+   */
+  async getAppConfig() {
+    return await this.makeRequest('/config');
   }
 }
 

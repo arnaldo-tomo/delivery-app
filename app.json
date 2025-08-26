@@ -11,6 +11,10 @@
     "ios": {
       "config": {
         "googleMapsApiKey": "AIzaSyAtu-ig_-9TgJwxRqhTMrnDLF1HgeTxm1c"
+      },
+       "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Este app precisa da localização para mostrar pedidos próximos.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Este app precisa da localização para rastrear entregas."
       }
     },
     "android": {
