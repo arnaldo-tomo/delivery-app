@@ -1,24 +1,23 @@
-// src/screens/RealHomeScreen.js - Versão com permissões de localização corrigidas
+// src/screens/RealHomeScreen.js - Versão CORRIGIDA com funcionalidades de proximidade
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
+  StyleSheet,
   SafeAreaView,
   RefreshControl,
   Alert,
   Switch,
   Modal,
-  StyleSheet,
   Linking,
-  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { useDelivery } from '../context/DeliveryContext';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Location from 'expo-location';
 
 const colors = {
   primary: { 100: '#FE3801', 80: '#F94234', 50: '#FB7D80', 20: '#FED8CC' },
@@ -33,139 +32,209 @@ const colors = {
 
 export default function RealHomeScreen({ navigation }) {
   const { user } = useAuth();
-  const {
-    availableOrders,
-    activeDelivery,
-    loading,
-    isOnline,
-    currentLocation,
-    deliveryRadius,
-    locationPermission,
-    fetchAvailableOrders,
-    fetchMyDeliveries,
-    toggleOnlineStatus,
-    updateDeliveryRadius,
-    setCurrentLocation,
-    setLocationPermission,
+  const { 
+    availableOrders, 
+    activeDelivery, 
+    loading, 
+    fetchAvailableOrders, 
+    fetchMyDeliveries 
   } = useDelivery();
 
-  // Estados locais
+  // Estados locais para funcionalidades de proximidade
   const [refreshing, setRefreshing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [tempRadius, setTempRadius] = useState(deliveryRadius);
-const [locationLoading, setLocationLoading] = useState(false);
-  // Request location permissions
-  const requestLocationPermission = async () => {
-    try {
-      const { status, canAskAgain } = await Location.requestForegroundPermissionsAsync();
-      const permissionGranted = status === 'granted';
-      setLocationPermission(permissionGranted);
+  const [isOnline, setIsOnline] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [locationPermission, setLocationPermission] = useState(null);
+  const [deliveryRadius, setDeliveryRadius] = useState(5);
 
-      if (!permissionGranted && canAskAgain) {
-        Alert.alert(
-          'Permissão Necessária',
-          'Este aplicativo precisa de acesso à localização para mostrar pedidos próximos.',
-          [
-            { text: 'Cancelar', style: 'cancel' },
-            { text: 'Tentar Novamente', onPress: requestLocationPermission },
-          ]
-        );
-        return false;
-      } else if (!permissionGranted) {
-        Alert.alert(
-          'Permissão Negada',
-          'Você negou o acesso à localização. Para habilitar, vá para as configurações do dispositivo.',
-          [
-            { text: 'OK', style: 'cancel' },
-            {
-              text: 'Abrir Configurações',
-              onPress: () => Linking.openSettings(),
-            },
-          ]
-        );
-        return false;
-      }
-      return true;
-    } catch (error) {
-      Alert.alert('Erro', 'Falha ao solicitar permissão de localização.');
-      return false;
-    }
-  };
-
-  // Fetch current location
-const fetchLocation = async () => {
-  setLocationLoading(true);
-  try {
-    const hasPermission = await requestLocationPermission();
-    if (!hasPermission) return;
-    const location = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
-    });
-    setCurrentLocation({
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-    });
-  } catch (error) {
-    setCurrentLocation(null);
-    Alert.alert('Erro', 'Falha ao obter a localização.');
-  } finally {
-    setLocationLoading(false);
-  }
-};
-
-  // Load data and location on screen focus
+  // Recarregar dados ao focar na tela
   useFocusEffect(
     useCallback(() => {
-      const loadData = async () => {
-        try {
-          await fetchLocation();
-          await Promise.all([fetchAvailableOrders(), fetchMyDeliveries()]);
-        } catch (error) {
-          Alert.alert('Erro', 'Falha ao carregar dados.');
-        }
-      };
       loadData();
-    }, [isOnline])
+      initializeLocation();
+    }, [])
   );
+
+  const loadData = async () => {
+    await Promise.all([
+      fetchAvailableOrders(),
+      fetchMyDeliveries()
+    ]);
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchLocation();
-    await Promise.all([fetchAvailableOrders(), fetchMyDeliveries()]);
+    await loadData();
     setRefreshing(false);
   };
 
-  const formatCurrency = (amount) => `MT ${parseFloat(amount || 0).toFixed(2)}`;
+  /**
+   * Inicializar localização e permissões
+   */
+  const initializeLocation = async () => {
+    try {
+      console.log('🗺️ Solicitando permissões de localização...');
+      
+      // Solicitar permissões
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocationPermission(status === 'granted');
+      
+      if (status !== 'granted') {
+        console.warn('❌ Permissão de localização negada');
+        Alert.alert(
+          'Permissão Necessária',
+          'Para receber pedidos próximos, você precisa permitir o acesso à localização.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { 
+              text: 'Abrir Configurações', 
+              onPress: () => Linking.openSettings() 
+            }
+          ]
+        );
+        return;
+      }
+
+      // Obter localização atual
+      console.log('📍 Obtendo localização atual...');
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      
+      const coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+      
+      setCurrentLocation(coords);
+      console.log('✅ Localização obtida:', coords);
+      
+      // TODO: Enviar localização para a API
+      // await updateLocationOnServer(coords);
+      
+    } catch (error) {
+      console.error('❌ Erro ao obter localização:', error);
+      Alert.alert(
+        'Erro de Localização',
+        'Não foi possível obter sua localização. Verifique se o GPS está ativo.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  /**
+   * Toggle status online/offline
+   */
+  const handleToggleOnline = async () => {
+    console.log('🔄 Toggle online status:', !isOnline);
+
+    // Verificar permissão de localização
+    if (!locationPermission) {
+      Alert.alert(
+        'Permissão Necessária',
+        'Para receber pedidos, você precisa permitir o acesso à localização.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { 
+            text: 'Abrir Configurações', 
+            onPress: () => Linking.openSettings() 
+          }
+        ]
+      );
+      return;
+    }
+
+    // Verificar se tem localização atual
+    if (!currentLocation) {
+      Alert.alert(
+        'Localização Indisponível',
+        'Não foi possível obter sua localização. Verifique se o GPS está ativo.',
+        [
+          { text: 'Tentar Novamente', onPress: initializeLocation },
+          { text: 'Cancelar', style: 'cancel' }
+        ]
+      );
+      return;
+    }
+
+    try {
+      const newStatus = !isOnline;
+      setIsOnline(newStatus);
+      
+      if (newStatus) {
+        console.log('✅ ONLINE - Buscando pedidos próximos...');
+        await loadData();
+        Alert.alert('Sucesso', 'Você está online! Buscando pedidos próximos...');
+      } else {
+        console.log('⏸️ OFFLINE');
+        Alert.alert('Offline', 'Você não receberá mais pedidos.');
+      }
+      
+      // TODO: Atualizar status na API
+      
+    } catch (error) {
+      console.error('❌ Erro ao alterar status:', error);
+      Alert.alert('Erro', 'Erro ao alterar status online');
+      // Reverter estado em caso de erro
+      setIsOnline(!isOnline);
+    }
+  };
+
+  /**
+   * Alterar raio de entrega
+   */
+  const handleRadiusChange = (newRadius) => {
+    setDeliveryRadius(newRadius);
+    setShowSettings(false);
+    console.log('📏 Raio alterado para:', newRadius, 'km');
+    
+    // Recarregar pedidos com novo raio se estiver online
+    if (isOnline) {
+      loadData();
+    }
+    
+    Alert.alert('Sucesso', `Raio de entrega alterado para ${newRadius}km`);
+  };
+
+  const formatCurrency = (amount) => {
+    return `MT ${parseFloat(amount || 0).toFixed(2)}`;
+  };
 
   const formatDistance = (distanceKm) => {
     if (!distanceKm) return '';
-    return distanceKm < 1
-      ? `${Math.round(distanceKm * 1000)}m`
-      : `${distanceKm.toFixed(1)}km`;
+    
+    if (distanceKm < 1) {
+      return `${Math.round(distanceKm * 1000)}m`;
+    }
+    return `${distanceKm.toFixed(1)}km`;
   };
 
   const getOrderStatusText = (status) => {
     const statusMap = {
-      pending: 'Pendente',
-      confirmed: 'Confirmado',
-      preparing: 'Preparando',
-      ready: 'Pronto',
-      picked_up: 'Coletado',
-      delivered: 'Entregue',
-      cancelled: 'Cancelado',
+      'pending': 'Pendente',
+      'confirmed': 'Confirmado', 
+      'preparing': 'Preparando',
+      'ready': 'Pronto',
+      'picked_up': 'Coletado',
+      'delivered': 'Entregue',
+      'cancelled': 'Cancelado'
     };
     return statusMap[status] || status;
   };
 
   const getDeliveryAddress = (deliveryAddress) => {
     if (!deliveryAddress) return 'Endereço não disponível';
+    
     if (typeof deliveryAddress === 'string') {
       try {
-        return getDeliveryAddress(JSON.parse(deliveryAddress));
+        const parsed = JSON.parse(deliveryAddress);
+        return getDeliveryAddress(parsed);
       } catch {
         return deliveryAddress;
       }
     }
+    
     if (typeof deliveryAddress === 'object') {
       const parts = [];
       if (deliveryAddress.street) parts.push(deliveryAddress.street);
@@ -173,57 +242,29 @@ const fetchLocation = async () => {
       if (deliveryAddress.city) parts.push(deliveryAddress.city);
       return parts.join(', ') || 'Endereço não disponível';
     }
+    
     return 'Endereço não disponível';
-  };
-
-  const handleToggleOnline = async () => {
-    if (!locationPermission) {
-      const granted = await requestLocationPermission();
-      if (!granted) return;
-    }
-
-    if (!currentLocation) {
-      await fetchLocation();
-      if (!currentLocation) return;
-    }
-
-    const result = await toggleOnlineStatus();
-    if (!result.success) {
-      Alert.alert('Erro', result.error);
-    }
-  };
-
-  const handleRadiusChange = async (newRadius) => {
-    const result = await updateDeliveryRadius(newRadius);
-    if (result.success) {
-      setTempRadius(newRadius);
-      setShowSettings(false);
-      Alert.alert('Sucesso', `Raio atualizado para ${newRadius}km`);
-    } else {
-      Alert.alert('Erro', result.error);
-    }
   };
 
   const renderLocationStatus = () => (
     <View style={styles.locationStatus}>
       <View style={styles.locationInfo}>
-        <Ionicons
-          name={currentLocation ? 'location' : 'location-outline'}
-          size={16}
-          color={currentLocation ? colors.success : colors.error}
+        <Ionicons 
+          name={currentLocation ? "location" : "location-outline"} 
+          size={16} 
+          color={currentLocation ? colors.success : colors.error} 
         />
-        <Text
-          style={[
-            styles.locationText,
-            { color: currentLocation ? colors.success : colors.error },
-          ]}
-        >
-          {currentLocation
+        <Text style={[
+          styles.locationText,
+          { color: currentLocation ? colors.success : colors.error }
+        ]}>
+          {currentLocation 
             ? `Localização ativa • Raio: ${deliveryRadius}km`
-            : 'Localização indisponível'}
+            : 'Localização indisponível'
+          }
         </Text>
       </View>
-      <TouchableOpacity
+      <TouchableOpacity 
         style={styles.settingsButton}
         onPress={() => setShowSettings(true)}
       >
@@ -235,17 +276,18 @@ const fetchLocation = async () => {
   const renderOnlineToggle = () => (
     <View style={styles.onlineContainer}>
       <View style={styles.onlineInfo}>
-        <View
-          style={[
-            styles.statusIndicator,
-            { backgroundColor: isOnline ? colors.success : colors.gray[100] },
-          ]}
-        />
-        <Text style={styles.onlineLabel}>{isOnline ? 'ONLINE' : 'OFFLINE'}</Text>
+        <View style={[
+          styles.statusIndicator,
+          { backgroundColor: isOnline ? colors.success : colors.gray[100] }
+        ]} />
+        <Text style={styles.onlineLabel}>
+          {isOnline ? 'ONLINE' : 'OFFLINE'}
+        </Text>
         <Text style={styles.onlineSubtitle}>
-          {isOnline
-            ? `${availableOrders.length} entregas disponíveis`
-            : 'Ative para receber pedidos'}
+          {isOnline 
+            ? `${availableOrders.length} entregas disponíveis` 
+            : 'Ative para receber pedidos'
+          }
         </Text>
       </View>
       <Switch
@@ -309,11 +351,9 @@ const fetchLocation = async () => {
         <View style={styles.paymentInfo}>
           <Ionicons name="card-outline" size={16} color={colors.secondary[100]} />
           <Text style={styles.paymentText}>
-            {item.payment_method === 'cash'
-              ? 'Dinheiro'
-              : item.payment_method === 'mpesa'
-              ? 'M-Pesa'
-              : item.payment_method || 'Não informado'}
+            {item.payment_method === 'cash' ? 'Dinheiro' : 
+             item.payment_method === 'mpesa' ? 'M-Pesa' : 
+             item.payment_method || 'Não informado'}
           </Text>
         </View>
         <Text style={styles.totalAmount}>
@@ -338,7 +378,7 @@ const fetchLocation = async () => {
     </TouchableOpacity>
   );
 
-  // Active delivery screen
+  // Se há entrega ativa, mostrar tela dedicada
   if (activeDelivery) {
     return (
       <SafeAreaView style={styles.container}>
@@ -347,6 +387,7 @@ const fetchLocation = async () => {
             <Ionicons name="bicycle" size={32} color={colors.primary[100]} />
             <Text style={styles.activeDeliveryTitle}>Entrega em Andamento</Text>
           </View>
+          
           <View style={styles.activeDeliveryCard}>
             <View style={styles.activeOrderHeader}>
               <Text style={styles.activeOrderNumber}>
@@ -358,6 +399,7 @@ const fetchLocation = async () => {
                 </Text>
               </View>
             </View>
+            
             <Text style={styles.activeCustomerName}>
               {activeDelivery.customer?.name || 'Cliente'}
             </Text>
@@ -367,15 +409,14 @@ const fetchLocation = async () => {
             <Text style={styles.activeAddress}>
               {getDeliveryAddress(activeDelivery.delivery_address)}
             </Text>
+            
             <View style={styles.activeCardFooter}>
               <Text style={styles.activeTotal}>
                 {formatCurrency(activeDelivery.total_amount)}
               </Text>
               <TouchableOpacity
                 style={styles.continueButton}
-                onPress={() =>
-                  navigation.navigate('RealMapDelivery', { order: activeDelivery })
-                }
+                onPress={() => navigation.navigate('RealMapDelivery', { order: activeDelivery })}
               >
                 <Ionicons name="map" size={16} color={colors.white} />
                 <Text style={styles.continueButtonText}>Ver no Mapa</Text>
@@ -389,36 +430,42 @@ const fetchLocation = async () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Olá, {user?.name || 'Entregador'}!</Text>
           <Text style={styles.subtitle}>
-            {isOnline
+            {isOnline 
               ? `${availableOrders.length} entregas disponíveis`
-              : 'Fique online para receber pedidos'}
+              : 'Fique online para receber pedidos'
+            }
           </Text>
         </View>
-        <TouchableOpacity
+        <TouchableOpacity 
           style={styles.refreshButton}
           onPress={onRefresh}
           disabled={!isOnline}
         >
-          <Ionicons
-            name="refresh"
-            size={24}
-            color={isOnline ? colors.primary[100] : colors.gray[100]}
+          <Ionicons 
+            name="refresh" 
+            size={24} 
+            color={isOnline ? colors.primary[100] : colors.gray[100]} 
           />
         </TouchableOpacity>
       </View>
 
+      {/* Status de localização */}
       {renderLocationStatus()}
+
+      {/* Toggle Online/Offline */}
       {renderOnlineToggle()}
 
+      {/* Lista de pedidos ou estados vazios */}
       {!isOnline ? (
-        <View style={styles.offlineContainer}>
+        <View style={styles.emptyContainer}>
           <Ionicons name="power-outline" size={64} color={colors.gray[100]} />
-          <Text style={styles.offlineTitle}>Você está offline</Text>
-          <Text style={styles.offlineSubtitle}>
+          <Text style={styles.emptyTitle}>Você está offline</Text>
+          <Text style={styles.emptySubtitle}>
             Ative o modo online para começar a receber pedidos na sua região
           </Text>
         </View>
@@ -429,6 +476,12 @@ const fetchLocation = async () => {
           <Text style={styles.emptySubtitle}>
             Permita o acesso à localização para receber pedidos próximos
           </Text>
+          <TouchableOpacity 
+            style={styles.locationButton}
+            onPress={initializeLocation}
+          >
+            <Text style={styles.locationButtonText}>Tentar Novamente</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -450,15 +503,17 @@ const fetchLocation = async () => {
               <Ionicons name="bicycle-outline" size={64} color={colors.gray[100]} />
               <Text style={styles.emptyTitle}>Nenhuma entrega disponível</Text>
               <Text style={styles.emptySubtitle}>
-                {loading
+                {loading 
                   ? 'Buscando pedidos na sua região...'
-                  : `Não há pedidos no raio de ${deliveryRadius}km. Tente aumentar o raio de entrega.`}
+                  : `Não há pedidos no raio de ${deliveryRadius}km. Tente aumentar o raio.`
+                }
               </Text>
             </View>
           }
         />
       )}
 
+      {/* Modal de Configurações */}
       <Modal
         visible={showSettings}
         animationType="slide"
@@ -480,38 +535,33 @@ const fetchLocation = async () => {
               <Text style={styles.settingDescription}>
                 Defina a distância máxima para receber pedidos
               </Text>
+              
+              {/* Botões para selecionar raio */}
               <View style={styles.radiusButtons}>
                 {[1, 2, 3, 5, 8, 10, 15].map((radius) => (
                   <TouchableOpacity
                     key={radius}
                     style={[
                       styles.radiusButton,
-                      {
-                        backgroundColor:
-                          deliveryRadius === radius ? colors.primary[100] : colors.gray[20],
-                      },
+                      { backgroundColor: deliveryRadius === radius ? colors.primary[100] : colors.gray[20] }
                     ]}
                     onPress={() => handleRadiusChange(radius)}
                   >
-                    <Text
-                      style={[
-                        styles.radiusButtonText,
-                        {
-                          color:
-                            deliveryRadius === radius
-                              ? colors.white
-                              : colors.typography[100],
-                        },
-                      ]}
-                    >
+                    <Text style={[
+                      styles.radiusButtonText,
+                      { color: deliveryRadius === radius ? colors.white : colors.typography[100] }
+                    ]}>
                       {radius}km
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
+              
               <View style={styles.radiusDisplay}>
                 <Text style={styles.radiusValue}>{deliveryRadius}km</Text>
-                <Text style={styles.radiusNote}>Raio atual de entrega</Text>
+                <Text style={styles.radiusNote}>
+                  Raio atual de entrega
+                </Text>
               </View>
             </View>
 
@@ -519,10 +569,11 @@ const fetchLocation = async () => {
               <View style={styles.settingSection}>
                 <Text style={styles.settingTitle}>Sua Localização</Text>
                 <Text style={styles.locationCoords}>
-                  📍 {currentLocation.latitude.toFixed(6)},{' '}
-                  {currentLocation.longitude.toFixed(6)}
+                  📍 {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
                 </Text>
-                <Text style={styles.settingDescription}>Última atualização: agora</Text>
+                <Text style={styles.settingDescription}>
+                  Última atualização: agora
+                </Text>
               </View>
             )}
 

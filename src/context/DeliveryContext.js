@@ -20,7 +20,7 @@ export const DeliveryProvider = ({ children }) => {
 
   const fetchAvailableOrders = async () => {
     setLoading(true);
-    try {
+    try {  
       const response = await ApiService.getAvailableOrders();
       if (response.status === 'success') {
         // console.log('Pedidos disponíveis ca÷rrregados:', response.data.data?.length || 0);
