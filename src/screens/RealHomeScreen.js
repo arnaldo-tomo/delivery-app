@@ -1,4 +1,4 @@
-// src/screens/RealHomeScreen.js - Versão CORRIGIDA com funcionalidades de proximidade
+// src/screens/RealHomeScreen.js - Versão OTIMIZADA com melhor exibição de dados
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -12,6 +12,7 @@ import {
   Switch,
   Modal,
   Linking,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDelivery } from '../context/DeliveryContext';
@@ -76,7 +77,6 @@ export default function RealHomeScreen({ navigation }) {
     try {
       console.log('🗺️ Solicitando permissões de localização...');
       
-      // Solicitar permissões
       const { status } = await Location.requestForegroundPermissionsAsync();
       setLocationPermission(status === 'granted');
       
@@ -96,7 +96,6 @@ export default function RealHomeScreen({ navigation }) {
         return;
       }
 
-      // Obter localização atual
       console.log('📍 Obtendo localização atual...');
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
@@ -109,9 +108,6 @@ export default function RealHomeScreen({ navigation }) {
       
       setCurrentLocation(coords);
       console.log('✅ Localização obtida:', coords);
-      
-      // TODO: Enviar localização para a API
-      // await updateLocationOnServer(coords);
       
     } catch (error) {
       console.error('❌ Erro ao obter localização:', error);
@@ -129,7 +125,6 @@ export default function RealHomeScreen({ navigation }) {
   const handleToggleOnline = async () => {
     console.log('🔄 Toggle online status:', !isOnline);
 
-    // Verificar permissão de localização
     if (!locationPermission) {
       Alert.alert(
         'Permissão Necessária',
@@ -145,7 +140,6 @@ export default function RealHomeScreen({ navigation }) {
       return;
     }
 
-    // Verificar se tem localização atual
     if (!currentLocation) {
       Alert.alert(
         'Localização Indisponível',
@@ -171,12 +165,9 @@ export default function RealHomeScreen({ navigation }) {
         Alert.alert('Offline', 'Você não receberá mais pedidos.');
       }
       
-      // TODO: Atualizar status na API
-      
     } catch (error) {
       console.error('❌ Erro ao alterar status:', error);
       Alert.alert('Erro', 'Erro ao alterar status online');
-      // Reverter estado em caso de erro
       setIsOnline(!isOnline);
     }
   };
@@ -189,7 +180,6 @@ export default function RealHomeScreen({ navigation }) {
     setShowSettings(false);
     console.log('📏 Raio alterado para:', newRadius, 'km');
     
-    // Recarregar pedidos com novo raio se estiver online
     if (isOnline) {
       loadData();
     }
@@ -197,35 +187,61 @@ export default function RealHomeScreen({ navigation }) {
     Alert.alert('Sucesso', `Raio de entrega alterado para ${newRadius}km`);
   };
 
+  /**
+   * FUNÇÕES DE FORMATAÇÃO OTIMIZADAS
+   */
+  
   const formatCurrency = (amount) => {
-    return `MT ${parseFloat(amount || 0).toFixed(2)}`;
+    if (!amount) return 'MT 0,00';
+    const numAmount = parseFloat(amount);
+    return `MT ${numAmount.toLocaleString('pt-MZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatDistance = (distanceKm) => {
     if (!distanceKm) return '';
     
-    if (distanceKm < 1) {
-      return `${Math.round(distanceKm * 1000)}m`;
+    const distance = parseFloat(distanceKm);
+    if (distance < 1) {
+      return `${Math.round(distance * 1000)}m`;
     }
-    return `${distanceKm.toFixed(1)}km`;
+    return `${distance.toFixed(1)}km`;
   };
 
   const getOrderStatusText = (status) => {
     const statusMap = {
-      'pending': 'Pendente',
+      'pending': 'Aguardando',
       'confirmed': 'Confirmado', 
       'preparing': 'Preparando',
-      'ready': 'Pronto',
+      'ready': 'Pronto para Coleta',
       'picked_up': 'Coletado',
+      'out_for_delivery': 'Saiu para Entrega',
       'delivered': 'Entregue',
       'cancelled': 'Cancelado'
     };
-    return statusMap[status] || status;
+    return statusMap[status] || status?.toUpperCase() || 'N/A';
   };
 
+  const getStatusColor = (status) => {
+    const colorMap = {
+      'pending': colors.secondary[50],
+      'confirmed': colors.secondary[100], 
+      'preparing': colors.secondary[100],
+      'ready': colors.success,
+      'picked_up': colors.primary[100],
+      'out_for_delivery': colors.primary[100],
+      'delivered': colors.success,
+      'cancelled': colors.error
+    };
+    return colorMap[status] || colors.gray[100];
+  };
+
+  /**
+   * Função otimizada para extrair endereço de entrega
+   */
   const getDeliveryAddress = (deliveryAddress) => {
     if (!deliveryAddress) return 'Endereço não disponível';
     
+    // Se for string, tentar fazer parse do JSON
     if (typeof deliveryAddress === 'string') {
       try {
         const parsed = JSON.parse(deliveryAddress);
@@ -235,15 +251,82 @@ export default function RealHomeScreen({ navigation }) {
       }
     }
     
+    // Se for objeto, extrair componentes
     if (typeof deliveryAddress === 'object') {
       const parts = [];
-      if (deliveryAddress.street) parts.push(deliveryAddress.street);
+      
+      // Verificar diferentes estruturas possíveis
+      if (deliveryAddress.street) {
+        // Se street for objeto ou array
+        if (typeof deliveryAddress.street === 'object') {
+          if (Array.isArray(deliveryAddress.street)) {
+            parts.push(...deliveryAddress.street.filter(Boolean));
+          } else {
+            // Se street for um objeto, tentar extrair valores
+            Object.values(deliveryAddress.street).forEach(val => {
+              if (val && typeof val === 'string') parts.push(val);
+            });
+          }
+        } else {
+          parts.push(deliveryAddress.street);
+        }
+      }
+      
+      // Adicionar outros campos
       if (deliveryAddress.neighborhood) parts.push(deliveryAddress.neighborhood);
+      if (deliveryAddress.district) parts.push(deliveryAddress.district);
       if (deliveryAddress.city) parts.push(deliveryAddress.city);
-      return parts.join(', ') || 'Endereço não disponível';
+      if (deliveryAddress.address) parts.push(deliveryAddress.address);
+      
+      // Filtrar valores vazios e retornar
+      const filtered = parts.filter(part => part && part.toString().trim());
+      return filtered.length > 0 ? filtered.join(', ') : 'Endereço não disponível';
     }
     
     return 'Endereço não disponível';
+  };
+
+  /**
+   * Função otimizada para extrair informações dos itens
+   */
+  const getOrderItemsDisplay = (items) => {
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return { preview: 'Itens não disponíveis', count: 0 };
+    }
+
+    const itemsPreview = items.slice(0, 2).map(item => {
+      const quantity = item.quantity || 1;
+      const name = item.menu_item?.name || item.name || 'Item';
+      return `${quantity}x ${name}`;
+    });
+
+    const hasMore = items.length > 2;
+    const moreCount = items.length - 2;
+
+    return {
+      preview: itemsPreview,
+      hasMore,
+      moreCount,
+      totalItems: items.length
+    };
+  };
+
+  /**
+   * Função para obter método de pagamento formatado
+   */
+  const getPaymentMethodDisplay = (paymentMethod) => {
+    const methodMap = {
+      'cash': { icon: 'cash', text: 'Dinheiro', color: colors.success },
+      'mpesa': { icon: 'phone-portrait', text: 'M-Pesa', color: colors.secondary[100] },
+      'card': { icon: 'card', text: 'Cartão', color: colors.primary[100] },
+      'bank_transfer': { icon: 'business', text: 'Transferência', color: colors.typography[80] }
+    };
+    
+    return methodMap[paymentMethod] || { 
+      icon: 'help-circle', 
+      text: paymentMethod?.toUpperCase() || 'N/A', 
+      color: colors.gray[100] 
+    };
   };
 
   const renderLocationStatus = () => (
@@ -285,7 +368,7 @@ export default function RealHomeScreen({ navigation }) {
         </Text>
         <Text style={styles.onlineSubtitle}>
           {isOnline 
-            ? `${availableOrders.length} entregas disponíveis` 
+            ? `${availableOrders.length} ${availableOrders.length === 1 ? 'entrega disponível' : 'entregas disponíveis'}` 
             : 'Ative para receber pedidos'
           }
         </Text>
@@ -299,84 +382,154 @@ export default function RealHomeScreen({ navigation }) {
     </View>
   );
 
-  const renderOrderCard = ({ item }) => (
-    <TouchableOpacity
-      style={styles.orderCard}
-      onPress={() => navigation.navigate('RealOrderDetails', { order: item })}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.restaurantInfo}>
-          <Text style={styles.restaurantName}>
-            {item.restaurant?.name || 'Restaurante'}
-          </Text>
-          <Text style={styles.customerName}>
-            {item.customer?.name || 'Cliente'}
-          </Text>
-        </View>
-        <View style={styles.cardHeaderRight}>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>
-              {getOrderStatusText(item.status)}
-            </Text>
+  /**
+   * RENDERIZAÇÃO OTIMIZADA DO CARD DE PEDIDO
+   */
+  const renderOrderCard = ({ item }) => {
+    // Extrair dados formatados
+    const deliveryAddress = getDeliveryAddress(item.delivery_address);
+    const itemsInfo = getOrderItemsDisplay(item.items);
+    const paymentInfo = getPaymentMethodDisplay(item.payment_method);
+    const statusColor = getStatusColor(item.status);
+    
+    return (
+      <TouchableOpacity
+        style={styles.orderCard}
+        onPress={() => navigation.navigate('RealOrderDetails', { order: item })}
+      >
+        {/* Header do Card */}
+        <View style={styles.cardHeader}>
+          <View style={styles.headerLeft}>
+            {/* Logo/Imagem do Restaurante */}
+            <View style={styles.restaurantImageContainer}>
+              {item.restaurant?.image ? (
+                <Image 
+                  source={{ uri: item.restaurant.image }} 
+                  style={styles.restaurantImage}
+                />
+              ) : (
+                <View style={styles.restaurantImagePlaceholder}>
+                  <Ionicons name="restaurant" size={16} color={colors.gray[100]} />
+                </View>
+              )}
+            </View>
+            
+            <View style={styles.orderBasicInfo}>
+              <Text style={styles.restaurantName}>
+                {item.restaurant?.name || 'Restaurante'}
+              </Text>
+              <Text style={styles.orderNumber}>
+                #{item.order_number || 'N/A'}
+              </Text>
+            </View>
           </View>
-          {item.distance_km && (
-            <Text style={styles.distanceText}>
-              📍 {formatDistance(item.distance_km)}
-            </Text>
+          
+          <View style={styles.headerRight}>
+            {/* Status Badge */}
+            <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
+              <Text style={styles.statusText}>
+                {getOrderStatusText(item.status)}
+              </Text>
+            </View>
+            
+            {/* Distância */}
+            {item.distance_km && (
+              <View style={styles.distanceContainer}>
+                <Ionicons name="location" size={12} color={colors.primary[100]} />
+                <Text style={styles.distanceText}>
+                  {formatDistance(item.distance_km)}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Informações do Cliente */}
+        <View style={styles.customerSection}>
+          <Ionicons name="person-outline" size={14} color={colors.typography[50]} />
+          <Text style={styles.customerName}>
+            {item.customer?.name || 'Cliente não informado'}
+          </Text>
+          {item.customer?.phone && (
+            <View style={styles.phoneIndicator}>
+              <Ionicons name="call-outline" size={12} color={colors.success} />
+            </View>
           )}
         </View>
-      </View>
 
-      <View style={styles.addressContainer}>
-        <Ionicons name="location-outline" size={16} color={colors.typography[20]} />
-        <Text style={styles.address} numberOfLines={2}>
-          {getDeliveryAddress(item.delivery_address)}
-        </Text>
-      </View>
-
-      <View style={styles.orderItems}>
-        {item.items?.slice(0, 2).map((orderItem, index) => (
-          <Text key={index} style={styles.itemText}>
-            {orderItem.quantity}x {orderItem.menu_item?.name || 'Item'}
-          </Text>
-        ))}
-        {item.items?.length > 2 && (
-          <Text style={styles.moreItems}>
-            +{item.items.length - 2} outros itens
-          </Text>
-        )}
-      </View>
-
-      <View style={styles.cardFooter}>
-        <View style={styles.paymentInfo}>
-          <Ionicons name="card-outline" size={16} color={colors.secondary[100]} />
-          <Text style={styles.paymentText}>
-            {item.payment_method === 'cash' ? 'Dinheiro' : 
-             item.payment_method === 'mpesa' ? 'M-Pesa' : 
-             item.payment_method || 'Não informado'}
+        {/* Endereço de Entrega */}
+        <View style={styles.addressSection}>
+          <Ionicons name="location-outline" size={14} color={colors.primary[100]} />
+          <Text style={styles.address} numberOfLines={2}>
+            {deliveryAddress}
           </Text>
         </View>
-        <Text style={styles.totalAmount}>
-          {formatCurrency(item.total_amount)}
-        </Text>
-      </View>
 
-      <View style={styles.extraInfo}>
-        {item.estimated_pickup_time && (
-          <View style={styles.extraItem}>
-            <Ionicons name="time-outline" size={14} color={colors.primary[100]} />
-            <Text style={styles.extraText}>
-              ~{item.estimated_pickup_time} min
+        {/* Itens do Pedido */}
+        <View style={styles.itemsSection}>
+          <View style={styles.itemsHeader}>
+            <Ionicons name="bag-outline" size={14} color={colors.secondary[100]} />
+            <Text style={styles.itemsCount}>
+              {itemsInfo.totalItems} {itemsInfo.totalItems === 1 ? 'item' : 'itens'}
             </Text>
           </View>
-        )}
-        <View style={styles.extraItem}>
-          <Ionicons name="receipt-outline" size={14} color={colors.primary[100]} />
-          <Text style={styles.extraText}>#{item.order_number}</Text>
+          
+          <View style={styles.itemsList}>
+            {itemsInfo.preview.map((itemText, index) => (
+              <Text key={index} style={styles.itemText}>
+                • {itemText}
+              </Text>
+            ))}
+            {itemsInfo.hasMore && (
+              <Text style={styles.moreItemsText}>
+                +{itemsInfo.moreCount} {itemsInfo.moreCount === 1 ? 'outro item' : 'outros itens'}
+              </Text>
+            )}
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+
+        {/* Footer do Card */}
+        <View style={styles.cardFooter}>
+          <View style={styles.footerLeft}>
+            {/* Método de Pagamento */}
+            <View style={styles.paymentInfo}>
+              <Ionicons name={paymentInfo.icon} size={14} color={paymentInfo.color} />
+              <Text style={[styles.paymentText, { color: paymentInfo.color }]}>
+                {paymentInfo.text}
+              </Text>
+            </View>
+            
+            {/* Tempo Estimado */}
+            {item.estimated_pickup_time && (
+              <View style={styles.timeInfo}>
+                <Ionicons name="time-outline" size={14} color={colors.typography[50]} />
+                <Text style={styles.timeText}>
+                  ~{item.estimated_pickup_time}
+                </Text>
+              </View>
+            )}
+          </View>
+          
+          {/* Valor Total */}
+          <View style={styles.totalSection}>
+            <Text style={styles.totalAmount}>
+              {formatCurrency(item.total_amount)}
+            </Text>
+            {item.delivery_fee && parseFloat(item.delivery_fee) > 0 && (
+              <Text style={styles.deliveryFee}>
+                Taxa: {formatCurrency(item.delivery_fee)}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {/* Indicador Visual de Ação */}
+        <View style={styles.actionIndicator}>
+          <Ionicons name="chevron-forward" size={16} color={colors.primary[100]} />
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   // Se há entrega ativa, mostrar tela dedicada
   if (activeDelivery) {
@@ -393,7 +546,10 @@ export default function RealHomeScreen({ navigation }) {
               <Text style={styles.activeOrderNumber}>
                 Pedido #{activeDelivery.order_number}
               </Text>
-              <View style={styles.activeStatusBadge}>
+              <View style={[
+                styles.activeStatusBadge,
+                { backgroundColor: getStatusColor(activeDelivery.status) }
+              ]}>
                 <Text style={styles.activeStatusText}>
                   {getOrderStatusText(activeDelivery.status)}
                 </Text>
@@ -436,7 +592,7 @@ export default function RealHomeScreen({ navigation }) {
           <Text style={styles.greeting}>Olá, {user?.name || 'Entregador'}!</Text>
           <Text style={styles.subtitle}>
             {isOnline 
-              ? `${availableOrders.length} entregas disponíveis`
+              ? `${availableOrders.length} ${availableOrders.length === 1 ? 'entrega disponível' : 'entregas disponíveis'}`
               : 'Fique online para receber pedidos'
             }
           </Text>
@@ -444,12 +600,12 @@ export default function RealHomeScreen({ navigation }) {
         <TouchableOpacity 
           style={styles.refreshButton}
           onPress={onRefresh}
-          disabled={!isOnline}
+          disabled={loading}
         >
           <Ionicons 
             name="refresh" 
             size={24} 
-            color={isOnline ? colors.primary[100] : colors.gray[100]} 
+            color={loading ? colors.gray[100] : (isOnline ? colors.primary[100] : colors.gray[100])}
           />
         </TouchableOpacity>
       </View>
@@ -487,8 +643,11 @@ export default function RealHomeScreen({ navigation }) {
         <FlatList
           data={availableOrders}
           renderItem={renderOrderCard}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
+          keyExtractor={(item) => `order-${item.id}`}
+          contentContainerStyle={[
+            styles.listContainer,
+            availableOrders.length === 0 && styles.emptyListContainer
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -505,9 +664,17 @@ export default function RealHomeScreen({ navigation }) {
               <Text style={styles.emptySubtitle}>
                 {loading 
                   ? 'Buscando pedidos na sua região...'
-                  : `Não há pedidos no raio de ${deliveryRadius}km. Tente aumentar o raio.`
+                  : `Não há pedidos no raio de ${deliveryRadius}km. Tente aumentar o raio de busca.`
                 }
               </Text>
+              {!loading && (
+                <TouchableOpacity 
+                  style={styles.settingsLinkButton}
+                  onPress={() => setShowSettings(true)}
+                >
+                  <Text style={styles.settingsLinkText}>Ajustar Configurações</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
@@ -536,7 +703,6 @@ export default function RealHomeScreen({ navigation }) {
                 Defina a distância máxima para receber pedidos
               </Text>
               
-              {/* Botões para selecionar raio */}
               <View style={styles.radiusButtons}>
                 {[1, 2, 3, 5, 8, 10, 15].map((radius) => (
                   <TouchableOpacity
@@ -595,7 +761,6 @@ export default function RealHomeScreen({ navigation }) {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -678,42 +843,71 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
+  emptyListContainer: {
+    flexGrow: 1,
+  },
+  // ESTILOS OTIMIZADOS PARA O CARD DE PEDIDO
   orderCard: {
     backgroundColor: colors.white,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 6,
+    elevation: 4,
+    position: 'relative',
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  restaurantInfo: {
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  restaurantImageContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginRight: 12,
+  },
+  restaurantImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  restaurantImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.gray[20],
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  orderBasicInfo: {
     flex: 1,
   },
   restaurantName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: colors.typography[100],
+    marginBottom: 2,
   },
-  customerName: {
-    fontSize: 14,
+  orderNumber: {
+    fontSize: 12,
     color: colors.typography[50],
-    marginTop: 2,
+    fontFamily: 'monospace',
   },
-  cardHeaderRight: {
+  headerRight: {
     alignItems: 'flex-end',
   },
   statusBadge: {
-    backgroundColor: colors.primary[20],
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     marginBottom: 4,
@@ -721,17 +915,39 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 10,
     fontWeight: '600',
-    color: colors.primary[100],
+    color: colors.white,
+  },
+  distanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   distanceText: {
-    fontSize: 12,
-    color: colors.typography[50],
-    fontWeight: '500',
+    fontSize: 11,
+    color: colors.primary[100],
+    fontWeight: '600',
+    marginLeft: 2,
   },
-  addressContainer: {
+  customerSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
+  customerName: {
+    fontSize: 14,
+    color: colors.typography[80],
+    fontWeight: '500',
+    marginLeft: 6,
+    flex: 1,
+  },
+  phoneIndicator: {
+    marginLeft: 8,
+  },
+  addressSection: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     marginBottom: 12,
+    paddingVertical: 4,
   },
   address: {
     flex: 1,
@@ -740,62 +956,86 @@ const styles = StyleSheet.create({
     marginLeft: 6,
     lineHeight: 18,
   },
-  orderItems: {
+  itemsSection: {
     marginBottom: 12,
   },
-  itemText: {
-    fontSize: 13,
-    color: colors.typography[80],
-    marginBottom: 2,
+  itemsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
   },
-  moreItems: {
+  itemsCount: {
     fontSize: 12,
+    color: colors.secondary[100],
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  itemsList: {
+    paddingLeft: 18,
+  },
+  itemText: {
+    fontSize: 12,
+    color: colors.typography[80],
+    marginBottom: 1,
+    lineHeight: 16,
+  },
+  moreItemsText: {
+    fontSize: 11,
     color: colors.typography[20],
     fontStyle: 'italic',
+    marginTop: 2,
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+    alignItems: 'flex-end',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[20],
+  },
+  footerLeft: {
+    flex: 1,
   },
   paymentInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 4,
   },
   paymentText: {
     fontSize: 12,
-    color: colors.secondary[100],
     marginLeft: 4,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  totalAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.primary[100],
-  },
-  extraInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  extraItem: {
+  timeInfo: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  extraText: {
+  timeText: {
     fontSize: 11,
-    color: colors.primary[100],
+    color: colors.typography[50],
     marginLeft: 3,
     fontWeight: '500',
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
+  totalSection: {
+    alignItems: 'flex-end',
   },
-  offlineContainer: {
+  totalAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.primary[100],
+  },
+  deliveryFee: {
+    fontSize: 10,
+    color: colors.typography[50],
+    marginTop: 2,
+  },
+  actionIndicator: {
+    position: 'absolute',
+    right: 8,
+    top: '50%',
+    marginTop: -8,
+  },
+  emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -809,13 +1049,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: 'center',
   },
-  offlineTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.typography[100],
-    marginTop: 16,
-    textAlign: 'center',
-  },
   emptySubtitle: {
     fontSize: 14,
     color: colors.typography[50],
@@ -823,13 +1056,29 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 20,
   },
-  offlineSubtitle: {
-    fontSize: 14,
-    color: colors.typography[50],
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 20,
+  locationButton: {
+    backgroundColor: colors.primary[100],
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
   },
+  locationButtonText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  settingsLinkButton: {
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  settingsLinkText: {
+    color: colors.primary[100],
+    fontSize: 14,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  // ESTILOS PARA ENTREGA ATIVA
   activeDeliveryContainer: {
     flex: 1,
     padding: 20,
@@ -867,7 +1116,6 @@ const styles = StyleSheet.create({
     color: colors.typography[100],
   },
   activeStatusBadge: {
-    backgroundColor: colors.success,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -918,6 +1166,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
+  // ESTILOS DO MODAL DE CONFIGURAÇÕES
   modalContainer: {
     flex: 1,
     backgroundColor: colors.background,
