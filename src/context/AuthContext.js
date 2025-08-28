@@ -1,6 +1,7 @@
-// src/context/AuthContext.js - Versão Simplificada e Robusta
+// src/context/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import ApiService from '../services/ApiService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const AuthContext = createContext();
 
@@ -26,11 +27,10 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       console.log('🔄 Inicializando autenticação...');
       
-      const token = await ApiService.getToken();
+      const token = await ApiService.getToken() || await AsyncStorage.getItem('tempAuthToken');
       
       if (token) {
         console.log('✅ Token encontrado, validando...');
-        
         try {
           const response = await ApiService.getProfile();
           
@@ -65,14 +65,12 @@ export const AuthProvider = ({ children }) => {
       
       const response = await ApiService.login(email, password);
       
-      if (response.status === 'success' && response.data?.user) {
+      if (response.status === 'success' && response.data?.user && response.data?.token) {
         console.log('✅ Login realizado com sucesso');
         setUser(response.data.user);
         
-        if (!rememberMe) {
-          console.log('⚠️ Modo temporário ativado');
-          // TODO: Implementar lógica para não persistir o token
-        }
+        // Salvar token com base em rememberMe
+        await ApiService.setToken(response.data.token, rememberMe);
         
         return { success: true, user: response.data.user };
       } else {
@@ -100,9 +98,10 @@ export const AuthProvider = ({ children }) => {
       
       const response = await ApiService.register(userData);
       
-      if (response.status === 'success' && response.data?.user) {
+      if (response.status === 'success' && response.data?.user && response.data?.token) {
         console.log('✅ Registro realizado com sucesso');
         setUser(response.data.user);
+        await ApiService.setToken(response.data.token, true); // Persistente por padrão
         return { success: true, user: response.data.user };
       } else {
         return { 
@@ -130,7 +129,6 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       console.error('❌ Erro no logout:', error);
-      // Mesmo com erro, limpar estado local
       setUser(null);
       return { success: false, error: error.message };
     }
@@ -157,13 +155,13 @@ export const AuthProvider = ({ children }) => {
       
       if (error.message.includes('Sessão expirada')) {
         setUser(null);
+        await ApiService.removeToken();
       }
       
       return { success: false, error: error.message };
     }
   };
 
-  // 🔍 DEBUG: Método para verificar estado atual
   const getDebugInfo = () => {
     return {
       user: user ? { id: user.id, name: user.name, email: user.email } : null,
@@ -175,25 +173,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   const value = {
-    // Estado
     user,
     loading,
     isInitialized,
     isAuthenticated: !!user,
-    
-    // Métodos principais
     login,
     register,
     logout,
     updateUser,
     refreshUser,
-    
-    // Utilitários
     getDebugInfo,
     initializeAuth,
   };
 
-  // 🔍 DEBUG: Log do estado sempre que mudar
   useEffect(() => {
     console.log('🔍 AuthContext State:', getDebugInfo());
   }, [user, loading, isInitialized]);
