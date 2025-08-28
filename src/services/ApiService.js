@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 class ApiService {
   constructor() {
-this.baseURL = 'http://192.168.100.6:8000/api/v1'; // Substitua pela sua URL
+this.baseURL = 'http://192.168.13.104:8000/api/v1'; // Substitua pela sua URL
     this.token = null;
     
     // Carregar token na inicialização
