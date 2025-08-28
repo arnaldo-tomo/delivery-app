@@ -56,10 +56,10 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
           <Image 
-            source={{ uri: 'https://via.placeholder.com/120x120/FE3801/FFFFFF?text=LOGO' }}
+            source={require('../../assets/icon.png')}
             style={styles.logo}
           />
-          <Text style={styles.title}>Bem-vindo de volta!</Text>
+          <Text style={styles.title}>Meu24</Text>
           <Text style={styles.subtitle}>Entre na sua conta para começar as entregas</Text>
         </View>
 
