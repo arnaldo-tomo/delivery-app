@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 class ApiService {
   constructor() {
-this.baseURL = 'http://192.168.100.3:8000/api/v1'; // Substitua pela sua URL
+this.baseURL = 'http://192.168.100.6:8000/api/v1'; // Substitua pela sua URL
     this.token = null;
     
     // Carregar token na inicialização
@@ -190,26 +190,91 @@ console.log('🔍 Analisando resposta do login...',response.data);
     });
   }
 
+
+   // **NOVO: Atualizar localização do entregador**
+  async updateLocation(latitude, longitude, deliveryRadius = null) {
+    const body = {
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude)
+    };
+    
+    if (deliveryRadius !== null) {
+      body.delivery_radius_km = parseFloat(deliveryRadius);
+    }
+
+    return await this.makeRequest('/delivery/location', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  } 
   // =============== DELIVERY METHODS ===============
-  async getAvailableOrders(page = 1, filters = {}) {
+  async getAvailableOrders(page = 1, radius = null) {
     let endpoint = `/delivery/available-orders?page=${page}`;
     
-    // Adicionar parâmetros de filtro
-    const params = new URLSearchParams();
-    
-    if (filters.radius) {
-      params.append('radius', filters.radius);
+    if (radius !== null) {
+      endpoint += `&radius=${radius}`;
     }
     
-    if (filters.max_orders) {
-      params.append('max_orders', filters.max_orders);
-    }
-
-    if (params.toString()) {
-      endpoint += `&${params.toString()}`;
-    }
-
     return await this.makeRequest(endpoint);
+  }
+
+  // Restaurant methods
+  async getRestaurants(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return await this.makeRequest(`/restaurants?${queryString}`);
+  }
+
+  async getRestaurantDetails(id) {
+    return await this.makeRequest(`/restaurants/${id}`);
+  }
+
+  async getMenuItems(restaurantId, categoryId = null) {
+    const endpoint = categoryId 
+      ? `/restaurants/${restaurantId}/menu?category_id=${categoryId}`
+      : `/restaurants/${restaurantId}/menu`;
+    return await this.makeRequest(endpoint);
+  }
+
+ // Order methods
+  async createOrder(orderData) {
+    return await this.makeRequest('/orders', {
+      method: 'POST',
+      body: JSON.stringify(orderData),
+    });
+  }
+
+  async acceptOrder(orderId) {
+    return await this.makeRequest(`/delivery/orders/${orderId}/accept`, {
+      method: 'POST',
+    });
+  }
+
+  async getMyDeliveries(page = 1) {
+    return await this.makeRequest(`/delivery/my-deliveries?page=${page}`);
+  }
+
+
+    async getOrders(page = 1) {
+    return await this.makeRequest(`/orders?page=${page}`);
+  }
+
+  async getOrderDetails(orderId) {
+    return await this.makeRequest(`/orders/${orderId}`);
+  }
+
+
+  async updateDeliveryStatus(orderId, status, location = null) {
+    const body = { status };
+    
+    if (location) {
+      body.latitude = location.latitude;
+      body.longitude = location.longitude;
+    }
+
+    return await this.makeRequest(`/delivery/orders/${orderId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
   }
 
   async acceptOrder(orderId, location = null) {

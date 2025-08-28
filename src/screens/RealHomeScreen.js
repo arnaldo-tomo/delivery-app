@@ -1,4 +1,3 @@
-// src/screens/RealHomeScreen.js - Versão OTIMIZADA com melhor exibição de dados
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -19,6 +18,7 @@ import { useDelivery } from '../context/DeliveryContext';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
+import ApiService from '../services/ApiService';
 
 const colors = {
   primary: { 100: '#FE3801', 80: '#F94234', 50: '#FB7D80', 20: '#FED8CC' },
@@ -50,12 +50,7 @@ export default function RealHomeScreen({ navigation }) {
   const [deliveryRadius, setDeliveryRadius] = useState(5);
 
   // Recarregar dados ao focar na tela
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-      initializeLocation();
-    }, [])
-  );
+useFocusEffect( useCallback(() => { loadData(); initializeLocation(); }, []) );
 
   const loadData = async () => {
     await Promise.all([
@@ -120,7 +115,33 @@ export default function RealHomeScreen({ navigation }) {
   };
 
   /**
-   * Toggle status online/offline
+   * FUNÇÃO CORRIGIDA: Enviar localização para API
+   */
+  const updateLocationOnServer = async (location, radius = null) => {
+    try {
+      console.log('📤 Enviando localização para servidor:', location);
+      
+      const result = await ApiService.updateLocation(
+        location.latitude, 
+        location.longitude, 
+        radius
+      );
+      
+      if (result.status === 'success') {
+        console.log('✅ Localização atualizada no servidor');
+        return true;
+      } else {
+        console.warn('⚠️ Falha ao atualizar localização:', result.message);
+        return false;
+      }
+    } catch (error) {
+      console.error('❌ Erro ao enviar localização:', error);
+      return false;
+    }
+  };
+
+  /**
+   * Toggle status online/offline - VERSÃO CORRIGIDA
    */
   const handleToggleOnline = async () => {
     console.log('🔄 Toggle online status:', !isOnline);
@@ -154,37 +175,67 @@ export default function RealHomeScreen({ navigation }) {
 
     try {
       const newStatus = !isOnline;
-      setIsOnline(newStatus);
       
       if (newStatus) {
-        console.log('✅ ONLINE - Buscando pedidos próximos...');
+        console.log('🚀 FICANDO ONLINE - Enviando localização...');
+        
+        // CRUCIAL: Enviar localização atual para o servidor
+        const locationUpdated = await updateLocationOnServer(currentLocation, deliveryRadius);
+        
+        if (!locationUpdated) {
+          Alert.alert(
+            'Erro',
+            'Não foi possível atualizar sua localização no servidor. Tente novamente.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
+        // Agora buscar pedidos com a localização atualizada
         await loadData();
+        
+        setIsOnline(true);
         Alert.alert('Sucesso', 'Você está online! Buscando pedidos próximos...');
+        
       } else {
-        console.log('⏸️ OFFLINE');
+        console.log('⏸️ FICANDO OFFLINE');
+        setIsOnline(false);
         Alert.alert('Offline', 'Você não receberá mais pedidos.');
       }
       
     } catch (error) {
       console.error('❌ Erro ao alterar status:', error);
-      Alert.alert('Erro', 'Erro ao alterar status online');
-      setIsOnline(!isOnline);
+      Alert.alert('Erro', 'Erro ao alterar status online: ' + error.message);
     }
   };
 
   /**
-   * Alterar raio de entrega
+   * Alterar raio de entrega - VERSÃO CORRIGIDA
    */
-  const handleRadiusChange = (newRadius) => {
-    setDeliveryRadius(newRadius);
-    setShowSettings(false);
-    console.log('📏 Raio alterado para:', newRadius, 'km');
-    
-    if (isOnline) {
-      loadData();
+  const handleRadiusChange = async (newRadius) => {
+    try {
+      console.log('📏 Alterando raio para:', newRadius, 'km');
+      
+      // Se estiver online e com localização, enviar para servidor
+      if (isOnline && currentLocation) {
+        const updated = await updateLocationOnServer(currentLocation, newRadius);
+        if (!updated) {
+          Alert.alert('Erro', 'Não foi possível atualizar o raio no servidor');
+          return;
+        }
+        
+        // Recarregar pedidos com novo raio
+        await loadData();
+      }
+      
+      setDeliveryRadius(newRadius);
+      setShowSettings(false);
+      
+      Alert.alert('Sucesso', `Raio de entrega alterado para ${newRadius}km`);
+    } catch (error) {
+      console.error('❌ Erro ao alterar raio:', error);
+      Alert.alert('Erro', 'Erro ao alterar raio: ' + error.message);
     }
-    
-    Alert.alert('Sucesso', `Raio de entrega alterado para ${newRadius}km`);
   };
 
   /**
@@ -761,6 +812,7 @@ export default function RealHomeScreen({ navigation }) {
     </SafeAreaView>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
