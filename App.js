@@ -1,5 +1,4 @@
-
-// App.js - Versão com StatusBar Corrigida
+// App.js - Versão Final com Onboarding
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -8,18 +7,19 @@ import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, ActivityIndicator, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-// Screens - TODAS CORRETAS
+// Screens
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
-import RealHomeScreen from './src/screens/RealHomeScreen';           // ✅ CORRIGIDO
+import RealHomeScreen from './src/screens/RealHomeScreen';
 import RealOrderDetailsScreen from './src/screens/RealOrderDetailsScreen';
 import RealHistoryScreen from './src/screens/HistoryScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import RealMapDeliveryScreen from './src/screens/RealMapDeliveryScreen';
 
-// Context - CORRETOS
+// Context
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { OnboardingProvider, useOnboarding } from './src/context/OnboardingContext';
 import { DeliveryProvider } from './src/context/DeliveryContext';
-
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -34,11 +34,11 @@ const colors = {
 };
 
 // Tela de Loading
-function LoadingScreen() {
+function LoadingScreen({ message = "Carregando..." }) {
   return (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color={colors.primary[100]} />
-      <Text style={styles.loadingText}>Verificando login...</Text>
+      <Text style={styles.loadingText}>{message}</Text>
     </View>
   );
 }
@@ -79,9 +79,8 @@ function MainTabs() {
         },
       })}
     >
-
-   <Tab.Screen name="RealHome" component={RealHomeScreen} options={{ tabBarLabel: 'Início' }} />
-   <Tab.Screen name="RealHistory" component={RealHistoryScreen} options={{ tabBarLabel: 'Histórico' }} />
+      <Tab.Screen name="RealHome" component={RealHomeScreen} options={{ tabBarLabel: 'Início' }} />
+      <Tab.Screen name="RealHistory" component={RealHistoryScreen} options={{ tabBarLabel: 'Histórico' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: 'Perfil' }} />
     </Tab.Navigator>
   );
@@ -89,18 +88,24 @@ function MainTabs() {
 
 // Navigator principal
 function AppNavigator() {
-  const { isAuthenticated, loading, isInitialized } = useAuth();
+  const { isAuthenticated, loading: authLoading, isInitialized } = useAuth();
+  const { shouldShowOnboarding, loading: onboardingLoading } = useOnboarding();
 
   // Mostrar loading durante inicialização
-  if (!isInitialized || loading) {
-    return <LoadingScreen />;
+  if (!isInitialized || authLoading || onboardingLoading) {
+    return <LoadingScreen message="Iniciando aplicação..." />;
+  }
+
+  // Mostrar onboarding se for primeira vez
+  if (shouldShowOnboarding()) {
+    return <OnboardingScreen />;
   }
 
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
-          // Usuário autenticado
+          // Usuário autenticado - Telas principais
           <>
             <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen 
@@ -115,7 +120,7 @@ function AppNavigator() {
             />
           </>
         ) : (
-          // Usuário não autenticado
+          // Usuário não autenticado - Tela de login
           <Stack.Screen name="Login" component={LoginScreen} />
         )}
       </Stack.Navigator>
@@ -126,15 +131,16 @@ function AppNavigator() {
 // App principal
 export default function App() {
   return (
-    <AuthProvider>
-      <DeliveryProvider>
-        <View style={styles.container}>
-          {/* StatusBar sem backgroundColor para evitar warning */}
-          <StatusBar style="dark" />
-          <AppNavigator />
-        </View>
-      </DeliveryProvider>
-    </AuthProvider>
+    <OnboardingProvider>
+      <AuthProvider>
+        <DeliveryProvider>
+          <View style={styles.container}>
+            <StatusBar style="auto" />
+            <AppNavigator />
+          </View>
+        </DeliveryProvider>
+      </AuthProvider>
+    </OnboardingProvider>
   );
 }
 
