@@ -123,6 +123,7 @@ function AppNavigator() {
         ) : (
           // Usuário não autenticado - Telas de autenticação
           <>
+   
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
           </>
