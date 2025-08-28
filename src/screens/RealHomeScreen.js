@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 import ApiService from '../services/ApiService';
+import { API_BASE_PICTURE } from '../config/api';
 
 const colors = {
   primary: { 100: '#FE3801', 80: '#F94234', 50: '#FB7D80', 20: '#FED8CC' },
@@ -454,10 +455,14 @@ useFocusEffect( useCallback(() => { loadData(); initializeLocation(); }, []) );
             {/* Logo/Imagem do Restaurante */}
             <View style={styles.restaurantImageContainer}>
               {item.restaurant?.image ? (
-                <Image 
-                  source={{ uri: item.restaurant.image }} 
-                  style={styles.restaurantImage}
-                />
+
+<Image
+  source={{ uri: `${API_BASE_PICTURE}${item.restaurant.image}` }}
+  style={styles.restaurantImage}
+  resizeMode="cover"
+/>
+
+
               ) : (
                 <View style={styles.restaurantImagePlaceholder}>
                   <Ionicons name="restaurant" size={16} color={colors.gray[100]} />
@@ -823,7 +828,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 30,
     backgroundColor: colors.white,
     borderBottomWidth: 1,
     borderBottomColor: colors.gray[20],
