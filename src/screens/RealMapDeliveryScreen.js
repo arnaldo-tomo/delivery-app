@@ -271,11 +271,11 @@ export default function RealMapDeliveryScreen({ route, navigation }) {
         setCurrentStatus(newStatus);
         
         if (newStatus === 'delivered') {
-          Alert.alert(
-            '🎉 Entrega Concluída!',
-            'Parabéns! A entrega foi realizada com sucesso.',
-            [{ text: 'OK', onPress: () => navigation.navigate('RealHome') }]
-          );
+    Alert.alert(
+        '🎉 Entrega Concluída!',
+        'Parabéns! A entrega foi realizada com sucesso.',
+        [{ text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'RealHome' }) }]
+      );
         } else {
           if (restaurantLocation && customerLocation) {
             await calculateRoute(currentLocation, restaurantLocation, customerLocation);
