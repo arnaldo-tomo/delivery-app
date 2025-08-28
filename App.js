@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 // Screens
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import RegisterScreen from './src/screens/RegisterScreen';
 import RealHomeScreen from './src/screens/RealHomeScreen';
 import RealOrderDetailsScreen from './src/screens/RealOrderDetailsScreen';
 import RealHistoryScreen from './src/screens/HistoryScreen';
@@ -120,8 +121,11 @@ function AppNavigator() {
             />
           </>
         ) : (
-          // Usuário não autenticado - Tela de login
-          <Stack.Screen name="Login" component={LoginScreen} />
+          // Usuário não autenticado - Telas de autenticação
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
