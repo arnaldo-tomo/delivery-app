@@ -1,5 +1,6 @@
 // src/config/api.js
 const API_BASE_URL = 'http://192.168.100.3:8000/api/v1'; // Substitua pela sua URL real
+export const API_BASE_PICTURE = 'http://192.168.100.3:8000/storage/'; // Substitua pela sua URL real
 
 export const api = {
   // Auth endpoints
